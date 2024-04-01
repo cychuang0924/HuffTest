@@ -1,6 +1,9 @@
+
+
 /* Interface */
 #define function setValue(uint256) nonpayable returns ()
 #define function getValue() view returns (uint256)
+#define function add() view returns (uint256)
 
 /* Storage Slots */
 #define constant VALUE_LOCATION = FREE_STORAGE_POINTER()
@@ -10,9 +13,6 @@
     0x04 calldataload   // [value]
     [VALUE_LOCATION]    // [ptr, value]
     sstore              // []
-
-    // End Execution
-    stop
 }
 
 #define macro GET_VALUE() = takes (0) returns (0) {
@@ -22,7 +22,19 @@
 
     // Store value in memory.
     0x00 mstore
+    
+    // Return value
+    0x20 0x00 return
+}
 
+#define macro Add() = takes (0) returns (0) {
+    // Load value from storage.
+    [VALUE_LOCATION]   // [ptr]
+    sload                // [value]
+
+    // Store value in memory.
+    0x00 mstore
+    
     // Return value
     0x20 0x00 return
 }
@@ -31,7 +43,8 @@
     // Identify which function is being called.
     0x00 calldataload 0xE0 shr
     dup1 __FUNC_SIG(setValue) eq set jumpi
-    dup1 __FUNC_SIG(getValue) eq get jumpi
+    dup1 0x20965255 eq get jumpi
+    dup1 __FUNC_SIG(add) eq add jumpi
 
     0x00 0x00 revert
 
@@ -39,5 +52,6 @@
         SET_VALUE()
     get:
         GET_VALUE()
-
+    add:
+        Add()
 }

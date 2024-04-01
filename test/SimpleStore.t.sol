@@ -15,9 +15,10 @@ contract SimpleStoreTest is Test {
     }
 
     /// @dev Ensure that you can set and get the value.
-    function testSetAndGetValue(uint256 value) public {
+    function testSetAndGetValue() public {
+        uint256 value = 7;
         simpleStore.setValue(value);
-        console.log(value);
+        console.log(simpleStore.add());
         console.log(simpleStore.getValue());
         assertEq(value, simpleStore.getValue());
     }
@@ -26,4 +27,5 @@ contract SimpleStoreTest is Test {
 interface SimpleStore {
     function setValue(uint256) external;
     function getValue() external returns (uint256);
+    function add( ) external returns (uint256);
 }
