@@ -7,7 +7,7 @@ import "forge-std/Script.sol";
 interface SimpleStore {
   function setValue(uint256) external;
   function getValue() external returns (uint256);
-  function add() external returns (uint256);
+  function add(uint256, uint256) external returns (uint256);
 }
 
 contract Deploy is Script {

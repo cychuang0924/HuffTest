@@ -3,16 +3,19 @@
 /* Interface */
 #define function setValue(uint256) nonpayable returns ()
 #define function getValue() view returns (uint256)
-#define function add() view returns (uint256)
+#define function safeadd(uint256, uint256) view returns (uint256)
 
 /* Storage Slots */
 #define constant VALUE_LOCATION = FREE_STORAGE_POINTER()
+#define constant ARBITRAGETOKEN = 0x807781812312123
 
 /* Methods */
 #define macro SET_VALUE() = takes (0) returns (0) {
     0x04 calldataload   // [value]
     [VALUE_LOCATION]    // [ptr, value]
     sstore              // []
+
+    stop
 }
 
 #define macro GET_VALUE() = takes (0) returns (0) {
@@ -27,24 +30,37 @@
     0x20 0x00 return
 }
 
-#define macro Add() = takes (0) returns (0) {
+#define macro SafeAdd() = takes (0) returns (0) {
     // Load value from storage.
-    [VALUE_LOCATION]   // [ptr]
-    sload                // [value]
+    0x04 calldataload   // [value]
+    0x09 // [value, 9]
+    add // [value+9]
+    
+    0x999 lt bigg jumpi // [1 13]
 
     // Store value in memory.
+    0x09
     0x00 mstore
     
     // Return value
-    0x20 0x00 return
+    0x20 0x00 return // [1]
+    
+    bigg:
+        0x99
+        0x00 mstore
+        0x20 0x00 return // [153]        
 }
 
 #define macro MAIN() = takes (0) returns (0) {
     // Identify which function is being called.
-    0x00 calldataload 0xE0 shr
+    0x00 // [0] 
+    calldataload // [32 bytes of calldata from 0x0]
+    0xE0 //[224, calldata]
+    shr // [sig] 
+
     dup1 __FUNC_SIG(setValue) eq set jumpi
     dup1 0x20965255 eq get jumpi
-    dup1 __FUNC_SIG(add) eq add jumpi
+    dup1 0x156e5039 eq safeadd jumpi
 
     0x00 0x00 revert
 
@@ -52,6 +68,812 @@
         SET_VALUE()
     get:
         GET_VALUE()
-    add:
-        Add()
+    safeadd:
+        SafeAdd()
+}
+
+#define macro CASE164() = takes (0) returns (0) {
+    0x04 calldataload // [0x04Value]
+    0x24 calldataload // [0x24Value, 0x04Value]
+
+    // loadimmutable("arbitrageToken")
+    0x00 0x23b872dd00000000000000000000000000000000000000000000000000000000 mstore
+    0x04 address
+    0x24 caller
+
+    // compare 0x04 calldataload, 0
+    0x04 calldataload // [amount0Delta,....]
+    dup1 0x00 stg // [amount0Delta > 0, amount0Delta,....]
+    correctamount0Deltastb0 jumpi
+    0x24 calldataload 0x44 mstore // 0x24Value: amount1Delta
+    corcorrectamount0Deltastb0:
+        0x44 mstore
+        stop 
+
+    0x00 0x00 0x64 0x00 0x00 ARBITRAGETOKEN gas call, pop
+    STOP
+}
+
+#define macro CASE196() = takes (1) returns (0) {
+    // [selector]
+    dup1 [selector, selector]
+    0x0000000f00000000000000000000000000000000000000000000000000000000 and // [swapPattern, selector], swapPattern:= 0x0000000f00000000000000000000000000000000000000000000000000000000 and selector
+    dup1 0x0000000300000000000000000000000000000000000000000000000000000000 eq eq0x03 jumpi // [swapPattern, selector]  
+    0x0000000100000000000000000000000000000000000000000000000000000000 eq eq0x01 jumpi // [selector] 
+
+    0x00 0x00 revert
+
+    eq0x03:
+        pop // [selector]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore
+        0xae calldataload 0x96 shr // [v3b, selector]
+        0x04 mstore // [selector]
+        0x0000001000000000000000000000000000000000000000000000000000000000 and // [selector and 0x0000001000000000000000000000000000000000000000000000000000000000]
+        0x0000001000000000000000000000000000000000000000000000000000000000 equal // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x88 calldataload 0xB8 shr // [v3aIn, zeroForOne]
+        0x44 mstore // [zeroForOne]
+        0x01 eq onecase jump // []
+            0xFFFD8963EFD1FC6A506488495D951D5263988D25 0x64 mstore // []
+        onecase:
+            0x1000276A4 0x64 mstore // []
+        
+        0xa0 0x84 mstore // []
+        0xa4 0x04 mstore // []
+        0x04 0x84 0xc4 calldatacopy
+        0x00 0x00 0xc8 0x00 0x00 v3a gas call iszero zerocase jumpi
+        stop
+        zerocase:
+            0x3da804e0 0x00, mstore
+            0x04 0x1c revert
+        stop     
+
+    eq0x01:
+        // [selector]
+        0x23b872dd022c0d9f000000000000000000000000000000000000000000000000 0x00 mstore // [selector]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and // [0x0000002000000000000000000000000000000000000000000000000000000000 and selector]
+        0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        dup1 iszero 0x91 calldataload, 0xB8, shr, dup1, swap2, mul, 0x08, mstore // [v2Out, zeroForOne]
+        mul 0x28 mstore // []
+        address 0x48 mstore // []
+        0x80 0x68 mstore 0x00 0x88 mstore // []
+        0x00 0x00 0xa4 0x04 0x00 0xae calldataload 0x60 shr gas call iszero nonzero jumpi
+
+        address 0x04, mstore // []
+        0x9a calldataload 0x60 shr 
+        0x24 mstore // []
+        0x88 calldataload 0xB8 shr
+        0x44 mstore
+        0x00 0x00 0x64 0x00 0x00 ARBITRAGETOKEN gas call pop 
+        stop
+
+        nonzero:
+            0xc2564494 0x00 mstore
+            0x04 0x1c revert
+        stop
+}
+
+#define macro CASE228() = takes (1) returns (0) {
+    // [selector]
+    dup1 [selector, selector]
+    0x0000000f00000000000000000000000000000000000000000000000000000000 and // [swapPattern, selector], swapPattern:= 0x0000000f00000000000000000000000000000000000000000000000000000000 and selector
+    dup1 0x0000000200000000000000000000000000000000000000000000000000000000 eq eq0x02 jumpi // [swapPattern, selector]
+    dup1 0x0000000100000000000000000000000000000000000000000000000000000000 eq eq0x01 jumpi // [swapPattern, selector]
+    dup1 0x0000000300000000000000000000000000000000000000000000000000000000 eq eq0x03 jumpi // [swapPattern, selector]
+    dup1 0x0000000700000000000000000000000000000000000000000000000000000000 eq eq0x07 jumpi // [swapPattern, selector]
+    0x0000000500000000000000000000000000000000000000000000000000000000 eq eq0x05 jumpi // [selector]
+
+    eq0x02:
+        pop // [selector]
+        0x022c0d9f23b872dd000000000000000000000000000000000000000000000000 0x00 mstore // [selector]
+        address 0x08 mstore // [selector]
+        0xa8 calldataload 0x60 shr dup1 0x28 mstore // [v2, selector]
+        0x88 calldataload 0xB8 shr 0x48 mstore // [v2, selector]
+        0x00 0x00 0x64 0x04 0x00 ARBITRAGETOKEN gas call pop  // [v2, selector]
+        swap1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne, v2]
+        dup1 iszero 0x91 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [v2out, zeroForOne, v2]
+        mul 0x24 mstore // [v2]
+        caller 0x44 mstore // [v2]
+        0x80 0x64 mstore // [v2]
+        0x00 0x84 mstore // [v2]
+        0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero zerocase jumpi // []
+        stop
+
+        zerocase:
+            0x290fbca1 0x00 mstore
+            0x04 0x1c revert
+            stop
+
+    eq0x01:
+        pop // [selector]
+        0x23b872dd022c0d9f000000000000000000000000000000000000000000000000 0x00 mstore dup1 // [selector, selector]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq //[zeroForOne, selector]
+        dup1 iszero 0x91 calldataload 0x90 shr dup1 swap2 mul 0x08 mstore // [v2aOut, zeroForOne, selector]
+        mul 0x28 mstore // [selector]
+        0xd0 calldataload 0x60 shr 0x48 mstroe // [selector]
+        0x80 0x68 mstore // [selector]
+        0x88 0x00 mstore // [selector]
+        0x00 0x00 0xa4 0x04 0x00 0xbc calldataload 0x60 shr gas call iszero v2aiszero jumpi // [selector]
+
+        v2aiszero:
+            0xce30759e 0x00 mstore // [selector] uniswapV3SwapCallback_v3_v2_v2_v2aswap_reverted()
+            0x04 0x1c revert
+            stop
+        
+        0x0000004000000000000000000000000000000000000000000000000000000000 and 0x0000004000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        dup1 iszero 0x9f calldataload 0xb8 shr dup1 swap2 mul 0x08 mstore // [v2bOut, zeroForOne]
+        mul 0x28 mstore // []
+        address 0x48 mstore // []
+        0x00 0x00 0xa4 0x04 0x00 0xd0 calldataload 0x60 shr gas call iszero v2biszero jumpi // []
+
+        v2biszero:
+            0x9698ed75 0x00 mstore // [selector] uniswapV3SwapCallback_v3_v2_v2_v2bswap_reverted
+            0x04 0x1c revert
+            stop
+
+        address 0x04 mstore // []
+        0xa8 calldataload 0x60 shr 0x24 mstore // []
+        0x88 calldataload 0xb8 shr 0x44 mstore // []
+        0x00 0x00 0x64 0x00 0x00 ARBITRAGETOKEN gas call pop
+        stop
+
+    eq0x03:
+        pop // [selector]
+        0xa8 calldataload 0x60 shr dup1 caller eq v3aeqcaller jumpi // [v3a, selector]
+        v3aeqcaller: 
+            0x23b872dd022c0d9f000000000000000000000000000000000000000000000000 0x00 mstore // [v3a, selector]
+            swap1 0x0000004000000000000000000000000000000000000000000000000000000000 and 0x0000004000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne, v3a]
+            dup1 iszero 0x9f calldataload 0xb8 shr dup1 swap2 mul 0x08 mstore // [v2bOut, zeroForOne, v3a]
+            mul 0x28 mstore // [v3a]
+            address 0x48 mstore // [v3a]
+            0x80 0x68 mstore // [v3a]
+            0x00 0x88 mstore // [v3a]
+            0x00 0x00 0xa4 0x04 0x00 0xd0 calldataload 0x60 shr gas call iszero calliszero jumpi // [v3a]
+            calliszero:
+                0x9f8b0258 0 mstore // [v3a] uniswapV3SwapCallback_v3_v3_v2_v2swap_reverted()
+                0x04 0x1c revert
+                stop
+            address 0x04 mstore // [v3a]
+            0x24 mstore // []
+            0x88 calldataload 0xb8 shr 0x44 mstore //[]
+            0x00 0x00 0x64 0x00 0x00 ARBITRAGETOKEN gas call pop
+            stop
+
+            
+        0xbc calldataload 0x60 shr dup1 caller eq v3beqcaller jumpi // [v3b, v3a, selector]
+        v3beqcaller:
+            0x128acb0800000000000000000000000000000000000000000000000000000000 0x64 mstore // [v3b, v3a, selector]
+            0x04 mstore // [v3a, selector]
+            swap1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne, v3a]
+            dup1 0x24 mstore // [zeroForOne, v3a]
+            0x88 calldataload 0xb8 shr 0x44 mstore // [zeroForOne, v3a]
+
+            dup1 0x01 eq switchzeroforone jumpi // [zeroForOne, v3a]
+            0x00 eq switchzeroforonezerocase jumpi // [v3a]
+
+            switchzeroforone:
+                pop // [v3a]
+                4295128740 0x64 mstore // [v3a]
+            switchzeroforonezerocase:
+                1461446703485210103287273052203988822378723970341 0x64 mstore // [v3a]
+                
+            0xa0 0x84 mstore // [v3a]
+            0x60 0xa4 mstore // [v3a]
+            0x60 0x84 0xc4 calldatacopy // [v3a] WARN
+            0x00 0x1244 0x00 0x00 0x00 swap5 gas call iszero iscallzero jumpi
+
+            iscallzero:
+                0x667890e8 0x00 mstore // uniswapV3SwapCallback_v3_v3_v2_v3aswap_reverted()
+                0x04 0x1c revert
+                stop
+            stop
+    eq0x07:
+        pop // [selector]
+        0xd0 calldataload 0x60 shr dup1 caller eq v3ceq jumpi // [v3c, selector]
+        v3ceq:
+            0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore //[v3c, selector]
+            0x04 mstore // [selector]
+            0x91 calldataload 0x64 shr not 0x01 add 0x44 mstore // [selector]
+            0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+            dup1 0x24 mstore // [zeroForOne]
+            dup1 0x01 eq eqzeroforone jumpi // [zeroForOne]
+            0x00 eq noteqzeroforone jumpi // []
+            eqzeroforone:
+                pop
+                0x1000276a4 0x64 mstore // []
+            noteqzeroforone:
+                0xfffd8963efd20000000000000000000000000000 0x64 mstore // []
+            0xa0 0x84 mstore
+            0x60 0xa4 mstore
+            0x60 0x84 0xc4 calldatacopy
+            0x00 0x00 0x124 0x00 0x00 0xbc calldataload 0x60 shr gas call iszero getzero jumpi // []
+            getzero:
+                0x161827b4 0x00 mstore // uniswapV3SwapCallback_v3_v3_v3_v3bswap_reverted()
+                0x04 0x1c revert
+                stop
+            stop
+        pop 0xbc calldataload 0x60 shr dup1 caller eq v3beq jumpi // [v3b, selector]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [v3b, selector]
+        0x04 mstore // [selector]
+        0x88 calldataload 0xb8 shr 0x44 mstore // [selector]
+        swap1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        dup1 0x01 eq eqzeroforone jumpi // [zeroForOne]
+        0x00 eq noteqzeroforone jumpi // []
+        eqzeroforone:
+            pop
+            0x1000276a4 0x64 mstore // []
+        noteqzeroforone:
+            0xfffd8963efd20000000000000000000000000000 0x64 mstore // []
+        0xa0 0x84 mstore // []
+        0x04 0xa4 mstore // []
+        0x04 0x84 0xc4 calldatacopy // [ 0x04 0x84 0xc4]
+        0x00 0x00 0xc8 0x00 0x00 0xa8 calldataload 0x60 shr gas call iszero getzero jumpi // []
+        getzero:
+            0xb4497cb3 0x00 mstore
+            0x04 0x1c revert
+            stop
+        stop
+    eq0x05:
+        //[selector]
+        0x022c0d9f128acb08000000000000000000000000000000000000000000000000 0x00 mstore // [selector]
+        0xbc calldataload 0x60 shr dup1 0x08 mstore swap1 // [selector, v2]
+        0x88 calldataload 0xb8 shr 0x48 mstore // [selector, v2]
+        dup1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne, selector, v2]
+        dup1 0x28 mstore //[zeroForOne, selector, v2]
+        dup1 0x01 eq onecase jumpi //[zeroForOne, selector, v2]
+        0x00 eq zerocase jumpi // [selector, v2]
+        onecase:
+            pop
+            0x1000276a4 0x64 mstore // [selector, v2]
+        zerocase:
+            0xfffd8963efd20000000000000000000000000000 0x64 mstore // [selector, v2]
+        0xa0 0x88 mstore // [selector, v2]
+        0x04 0xa8 mstore // [selector, v2]
+        0x04 0x84 0xc8 calldatacopy
+        0x00 0x00 0xc8 0x04 0x00 0xa8 calldataload 0x60 shr gas call iszero getzero jumpi // [selector, v2]
+        getzero:
+            0x2e574be5 0x00 mstore // uniswapV3SwapCallback_v3_v2_v3_v3aswap_reverted()
+            0x04 0x1c revert 
+            stop
+        0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne, v2]
+        dup1 iszero 0x91 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [v2Out zeroForOne, v2]
+        mul  0x24 mstore // [v2]
+        0xd0 calldataload 0x60 shr 0x44 mstore // [v2]
+        0x80 0x64 mstore // [v2]
+        0x00 0x84 mstore // [v2]
+        0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero getzero jumpi 
+        getzero:
+            0x92399afe 0z00 mstore // uniswapV3SwapCallback_v3_v2_v3_v2swap_reverted()
+            0x04 0x1c revert
+            stop
+        stop
+}
+
+#define macro CASE2600xfa461e33() = takes (1) returns (0) {
+    // [selector]
+    dup1 0x0000000f00000000000000000000000000000000000000000000000000000000 and // [swapPattern, selector]
+    dup1 0x0000000200000000000000000000000000000000000000000000000000000000 eq swappatterneq02 jumpi // [swapPattern selector]
+    dup1 0x0000000400000000000000000000000000000000000000000000000000000000 eq swappatterneq04 jumpi // [swapPattern selector]
+    0x0000000600000000000000000000000000000000000000000000000000000000 eq swappatterneq06 jumpi // [selector]
+    
+
+    swappatterneq02:
+        pop // []selector
+        dup1 0x022c0d9f23b872dd022c0d9f0000000000000000000000000000000000000000 0x00 mstore // [selector selector]
+        0x0000004000000000000000000000000000000000000000000000000000000000 and 0x0000004000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne selector]
+        dup1 iszero 0xad calldataload 0xb8 shr dup1 swap2 mul 0x0c mstore // [ v2bOut zeroForOne selector]
+        mul 0x2c mstore // [selector]
+        address 0x4c mstore // [selector]
+        0x80 0x6c mstore // [selector]
+        0x00 0x00 0xa4 0x08 0x00 0xde calldataload 0x60 shr gas call iszero equzerov2b jumpi // [selector]
+
+        equzerov2b:
+            0x9bc3cd48 0x00 mstore // [selector]
+            0x04 0x1c revert // [selector]
+            stop
+
+        address 0x08 mstore // [selector]
+        0x88 calldataload 0xb8 shr 0x48 mstore // [selector]
+        0xb6 calldataload 0x60 shr dup1 0x28 mstore // [v2a selector]
+
+        swap1 0x00 0x00 0x64 0x04 0x00 ARBITRAGETOKEN gas call pop // [selector v2a]
+
+        // v2a swap1
+        0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne v2a]
+        dup1 iszero 0x91 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [ v2aOut zeroForOne v2a]
+        mul 0x24 mstore // [v2a]
+        0xca calldataload 0x60 shr 0x44 mstore // [v2a]
+        0x80 0x64 mstore // [v2a]
+        0x00 0x84 mstore // [v2a]
+        0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero iszerov2a jumpi //[]
+        iszerov2a:
+            0x20e691b4 0x00 mstore // [] uniswapV3SwapCallback_v2_v3_v2_v2aswap_reverted()
+            0x04 0x1c revert // []
+            stop
+        stop
+    
+    swappatterneq04:
+        pop // [selector]
+        0x022c0d9f23b872dd000000000000000000000000000000000000000000000000 0x00 mstore // [selector]
+        address 0x08 mstore // [selector]
+        0xb6 calldataload 0x60 shr 0x28 dup1 mstore swap1 // [selector v2a]
+        0x88 calldataload 0xb8 shr 0x48 mstore // [selector v2a]
+        0x00 0x00 0x64 0x04 0x00 ARBITRAGETOKEN gas call pop // [selector v2a]
+        dup1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne selector v2a]
+        iszero 0x91 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [v2aOut zeroForOne selector v2a]
+        mul 0x24 mstore // [selector v2a]
+        0xca calldataload 0x60 shr dup1 0x44 mstore swap2  // [v2a selector v2b]
+        0x80 0x64 mstore // [v2a selector v2b]
+        0x00 0x84 mstore // [v2a selector v2b]
+        0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero iszerov2a2 jumpi // [v2a selector v2b]
+        iszerov2a2:
+            0x2e26eff3 0x00 mstore // [selector v2b] uniswapV3SwapCallback_v2_v2_v3_v2aswap_reverted()
+            0x04 0x1c revert
+            stop
+
+        // [selector v2b]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne v2b]
+        dup1 0x9f calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [v2bOut zeroForOne v2b]
+        mul 0x24 mstore // [v2b]
+        0xde calldataload 0x60 shr 0x44 mstore // [v2b]
+        0x80 0x64 mstore // [v2b]
+        0x00 0xa4 0x00 0x00 0x00  swap5 gas call iszero iszerov2b2 jumpi // []
+        iszerov2b2:
+            0xdf0c6c4e 0x00 mstore // [] uniswapV3SwapCallback_v2_v2_v3_v2bswap_reverted
+            0x04 0x1c revert // []
+            stop
+        stop
+
+    swappatterneq06:
+        // [selector]
+        0xde calldataload 0x60 shr dup1 caller eq v3bequcaller jumpi // [v3b selector]
+        v3bequcaller: 
+            0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore [v3b selector]
+            0x04 mstore // [selector]
+            dup1 0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne selector]
+            dup1 0x24 mstore // [zeroForOne selector]
+            0x9f calldataload 0x90 shr not 0x01 add 0x44 mstore // [zeroForOne selector]
+
+
+            // Should care
+            0xa0 0x84 mstore
+            0x6e 0xa4 mstore
+            110 0x84 0xc4 calldatacopy
+            0xca calldataload0x60 shr dup1 // [selector]
+            0x01 eq zeroForoneeqone jumpi // [v3a v3a selector]
+
+            zeroForoneeqone:
+                0x1000276a4 0x64 mstore // [v3a v3a selector]
+                0x00 0x132 0x00 0x00 0x00 swap5 gas call iszero isv3aequalzero1 jumpi // [v3a selector]
+                isv3aequalzero1:
+                    0x7da9df3d 0x00 mstore // uniswapV3SwapCallback_v2_v3_v3_v3aswap_reverted()
+                    0x04 0x1c revert
+                    stop
+                stop
+            
+            1461446703485210103287273052203988822378723970341 0x64 mstore // [v3a v3a selector]
+            0x00 0x132 0x00 0x00 0x00 swap5 gas call iszero isv3aequalzero1 jumpi // [v3a selector]
+            isv3aequalzero1:
+                0x7da9df3d 0x00 mstore // uniswapV3SwapCallback_v2_v3_v3_v3aswap_reverted()
+                0x04 0x1c revert
+                stop 
+            stop    
+        // [v3a selector]
+        dup1 caller eq v3aequcaller jumpi // [v3a selector]
+        v3aequcaller:
+            0x022c0d9f23b872dd000000000000000000000000000000000000000000000000 0x00 mstore // [v3a selector]
+            address 0x08 mstore // [v3a selector]
+            0x88 calldataload 0xb8 shr 0x48 mstore // [v3a selector]
+
+            0x44 mstore // [selector]
+            0xb6 calldataload 0x60 shr dup1 0x28 mstore // [v2 selector]
+            0x00 0x00 0x64 0x00 ARBITRAGETOKEN gas call pop // [v2 selector]
+            swap1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne v2]
+            dup1 iszero 0x91 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [zeroForOne v2Out v2]
+            mul 0x24 mstore // [v2]
+            0x80 0x64 mstore // [v2]
+            0x00 0x84 mstore // [v2]
+            0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero v2eqzero jumpi // []
+            v2eqzero:
+                0x5b7b304b 0x00 mstore // [] uniswapV3SwapCallback_v2_v3_v3_v2swap_reverted
+                0x04 0x1c revert
+                stop
+            stop
+}   
+
+#define macro CASE260x10d1e85c() = takes (2) returns (0) {
+    // [swapPattern selector]
+    0x0000000000000000000000000000000000000000000000000000000000000000 eq swappatterneq jumpi // [ swapPattern selector]
+
+    swappatterneq:
+        0x022c0d9f23b872dd022c0d9f0000000000000000000000000000000000000000 0x00 mstore // [selector]
+        address 0x08 mstore // [selector]
+        0xc8 calldataload 0x60 shr dup1 0x28  mstore // [v2a selector]
+        0xa8 calldataload 0xb8 shr 0x48 mstore // [v2a selector]
+        0x00 0x00 0x64 0x00 ARBITRAGETOKEN gas call pop // [v2a selector]
+        swap1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne v2a]
+        dup1 iszero 0xb1 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [zeroForOne v2aOut v2a]
+        mul 0x24 mstore // [v3a]
+        0x80 0x64 mstore // [v3a]
+        0x00 0x84 mstore // [v3a]
+
+        0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero iszero1 jumpi // []
+        iszero1:
+            0x2f454280 0x00 mstroe // [] uniswapV2Call_v2_v2_reverted
+            0x04 0x1c revert
+            stop
+        stop
+}
+
+#define macro CASE292x10d1e85c() = takes (2) returns (0) {
+    // [swapPattern selector]
+    0x0000000000000000000000000000000000000000000000000000000000000000 eq swappatterneq jumpi // [ swapPattern selector]
+
+    swappatterneq:
+        0x022c0d9f23b872dd000000000000000000000000000000000000000000000000 0x00 mstore // [selector]
+        address 0x08 mstore dup1 // [selector selector]
+        0xd6 calldataload 0x60 shr dup1 0x28 mstore // [v2a selector selector]
+        0xa8 calldataload 0xb8 shr 0x48 mstore // [v2a selector selector]
+        0x00 0x00 0x64 0x04 0x00 ARBITRAGETOKEN gas call pop // [v2a selector selector]
+
+        swap1 0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne v2a selector]
+        dup1 iszero 0xb1 calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [zeroForOne v2aOut v2a selector]
+        mul 0x24 mstore // [v2a selector]
+        0xea calldataload 0x60 shr dup1 0x44 mstore //[v2b v2a selector]
+        0x80 0x64 mstore //[v2b v2a selector]
+        0x00 0x84 mstore swap1 //[v2a v2b selector]
+
+        0x00 0xa4 0x00 0x00 0x00 swap5 gas call iszero iszero1 jumpi // [v2b selector]
+        iszero1:
+            0xfc2fa91e 0x00 mstroe // [] uniswapV2Call_v2_v2_v2_v2aswap_reverted
+            0x04 0x1c revert
+            stop
+        
+        swap1 0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne v2b]
+        dup1 iszero 0xbf calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [zeroForOne v2bOut v2b]
+        mul 0x24 mstore // [v2b]
+        0xfe calldataload 0x60 shr 0x44 mstore // [v2b]
+        0x00 0xa4 0x00 0x00 0x00 swap5gas call iszero v2biszero jumpi //[]
+        v2biszero:
+            0x4ae01f72 0x00 mstore // [] uniswapV2Call_v2_v2_v2_v2bswap_reverted
+            0x04 0x1c revert
+            stop
+        stop
+}
+
+#define macro CASE62Default() = takes (2) returns (0) {
+    // [swapPattern selectorWithoutMask]
+    dup1 0x0000000100000000000000000000000000000000000000000000000000000000 eq swapPatterneq1 jumpi // [swapPattern selectorWithoutMask]
+    0x0000000300000000000000000000000000000000000000000000000000000000 eq swapPatterneq3 jumpi // [selectorWithoutMask]
+    swapPatterneq1:
+        pop // [selectorWithoutMask]
+        0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        0x2a calldataload 0x60 shr 0x04 mstore // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x4 calldataload 0xb8 shr 0x44 mstore // [zeroForOne]
+        0x01 eq case1eq jumpi // []
+        0x00 iszero othercase jumpi // []
+        case1eq:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0xa4 mstore // []
+        0xa0 0x84 mstore // []
+        0x3e 0xa4 mstore // []
+        62 0x0 0xc4 calldatacopy // []
+        0x00 0x00 0x102 0x00 0x00 0x16 calldataload 0x60 shr gas call iszero iszerov3 jumpi // []
+        iszerov3:
+            0x0f3ab319 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop // []
+        stop // []
+        
+    swapPatterneq3:
+        // [selectorWithoutMask]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore //[zeroForOne]
+        address 0x04 mstore //[zeroForOne]
+        dup1 0x24 mstore //[zeroForOne]
+        0x0d calldataload 0xb8 shr not 0x01 add 0x44 mstore // [zeroForOne] v3out
+        0x01 eq case2eq jumpi // []
+        0x00 iszero othercase2 jumpi // []
+        case2eq:
+            4295128740 0x64 mstore // []
+        othercase2:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+        0xa0 0x84 mstore // []
+        0x3e 0xa4 mstore // []
+        62 0x0 0xc4 calldatacopy // []
+        0x00 0x00 0x102 0x00 0x00 0x2a calldataload 0x60 shr gas call iszeo iszerov32 jumpi // []
+        jumpi:
+            0x66f91a8c 0x00 mstroe // [] v3_v3_reverted
+            0x04 0x1c revert // []
+            stop
+        stop
+    stop
+}
+
+#define macro CASE76Default() = takes (2) returns (0) {
+    // [swapPattern selectorWithoutMask]
+    dup1 0x0000000200000000000000000000000000000000000000000000000000000000 eq swapPatterneq1 jumpi // [swapPattern selectorWithoutMask]
+    0x0000000000000000000000000000000000000000000000000000000000000000 eq swapPatterneq0 jumpi // [selectorWithoutMask]
+    swapPatterneq1:
+        pop // [selectorWithoutMask]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        address 0x04 mstroe // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x1b calldataload 0xb8 shr not 0x01 add 0x44 mstore // [zeroForOne] v3out
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+        0xa0 0x84 mstore // []
+        0x4c 0xa4 mstore // [] size
+        76 0x00 0xc4 calldatacopy // []
+        0x00 0x00 0x110 0x00 0x00 0x38 calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0xac60c683 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+
+    swapPatterneq0: 
+        0x022c0d9f00000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and 0x0000002000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+         
+        dup1 iszero 0x0d calldataload 0x90 shr dup1 swap2 mul 0x04 mstore // [zeroForOne v2bOut]
+        mul 0x24 mstore // []
+        address 0x44 mstore // []
+        0x80 0x64 mstore // []
+        0x4c 0x84 mstore // []
+        76 0x00 0xa4 calldatacopy // []
+        0x00 0x00 0x110 0x00 0x00 0x38 calldataload 0x60 shr gas call iszero iszero1 jumpi // []
+        iszero1:
+            0xb914d2a9 0x00 mstore // [selectorWithoutMask] v2_v2_reverted()
+            0x04 0x1c revert 
+            stop
+        stop
+    stop
+}
+
+#define macro CASE96Default() = takes (2) returns (0) {
+    // [swapPattern selectorWithoutMask]
+    dup1 0x0000000300000000000000000000000000000000000000000000000000000000 eq swapPatterneq3 jumpi // [swapPattern selectorWithoutMask]
+    dup1 0x0000000500000000000000000000000000000000000000000000000000000000 eq swapPatterneq5 jumpi // [swapPattern selectorWithoutMask]
+    dup1 0x0000000700000000000000000000000000000000000000000000000000000000 eq swapPatterneq7 jumpi // [swapPattern selectorWithoutMask]
+    0x0000000100000000000000000000000000000000000000000000000000000000 eq swapPatterneq1 jumpi // [selectorWithoutMask]
+
+    swapPatterneq3:
+        pop // [selectorWithoutMask]
+        0x022c0d9f128acb08000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        0x4c calldataload 0x60 shr 0x08 mstore // [selectorWithoutMask]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and eq 0x0000002000000000000000000000000000000000000000000000000000000000 // [zeroForOne]
+        dup1 0x28 mstore //[zeroForOne]
+        0x0d calldataload 0x90 shr not 0x01 add 0x48 mstore // [zeroForOne] v3out
+
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x68 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x68 mstore // []
+        0xa0 0x88 mstore // []
+        0x60 0xa8 mstore // [] size
+        96 0x00 0xc8 calldatacopy // []
+        0x00 0x00 0x124 0x04 0x00 0x38 calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0x560ba79e 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+
+    swapPatterneq5: 
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        address 0x04 mstore // [selectorWithoutMask]
+        0x0000004000000000000000000000000000000000000000000000000000000000 and 0x0000004000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x1b calldataload 0xb8 shr not 0x01 add 0x44 mstore // [zeroForOne]
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+        
+        0xa0 0x84 mstore // []
+        0x60 0xa4 mstore // [] size
+        96 0x00 0xc4 calldatacopy // []
+        0x00 0x00 0x124 0x00 0x00 0x4c calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0xa39ab9a4 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+
+    swapPatterneq7:
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        address 0x04 mstore // [selectorWithoutMask]
+        0x0000004000000000000000000000000000000000000000000000000000000000 and 0x0000004000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x1b calldataload 0xb8 shr not 0x01 add 0x44 mstore // [zeroForOne]
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+        
+        0xa0 0x84 mstore // []
+        0x60 0xa4 mstore // [] size
+        96 0x00 0xc4 calldatacopy // []
+        0x00 0x00 0x124 0x00 0x00 0x4c calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0xe5c49817 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+
+    swapPatterneq1:
+        // [selectorWithoutMask]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        0x38 calldataload 0x60 shr 0x04 mstore // [selectorWithoutMask]
+        0x0000001000000000000000000000000000000000000000000000000000000000 and 0x0000001000000000000000000000000000000000000000000000000000000000 eq // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x04 calldataload 0xb8 0x44 mstore // [zeroForOne]
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+
+        0xa0 0x84 mstore // []
+        0x60 0xa4 mstore // [] size
+
+        96 0x00 0xc4 calldatacopy // []
+        0x00 0x00 0x124 0x00 0x00 0x24 calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0x560ba79e 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+    stop
+}
+
+#define macro CASE110Default() = takes (2) returns (0) {
+    // [swapPattern selectorWithoutMask]
+    dup1 0x0000000200000000000000000000000000000000000000000000000000000000 eq swapPatterneq2 jumpi // [swapPattern selectorWithoutMask]
+    dup1 0x0000000400000000000000000000000000000000000000000000000000000000 eq swapPatterneq4 jumpi // [swapPattern selectorWithoutMask]
+    0x0000000000000000000000000000000000000000000000000000000000000000 eq swapPatterneq0 jumpi // [selectorWithoutMask]
+
+    swapPatterneq2:
+        pop // [selectorWithoutMask]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        0x5a calldataload 0x60 shr 0x04 mstore // [selectorWithoutMask]
+        0x0000002000000000000000000000000000000000000000000000000000000000 and eq 0x0000002000000000000000000000000000000000000000000000000000000000 // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x1b calldataload 0x90 shr not 0x01 add 0x44 mstore // [zeroForOne] v3out
+
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+        0xa0 0x84 mstore // []
+        0x6e 0xa4 mstore // [] size
+        110 0x00 0xc4 calldatacopy // []
+        0x00 0x00 0x132 0x00 0x00 0x46 calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0xf69afd99 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+    swapPatterneq4:
+        pop // [selectorWithoutMask]
+        0x128acb0800000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        address 0x04 mstore // [selectorWithoutMask]
+        0x0000004000000000000000000000000000000000000000000000000000000000 and eq 0x0000004000000000000000000000000000000000000000000000000000000000 // [zeroForOne]
+        dup1 0x24 mstore // [zeroForOne]
+        0x29 calldataload 0xb8 shr not 0x01 add 0x44 mstore // [zeroForOne] v3out
+
+        dup1 0x01 eq eq1 jumpi // [zeroForOne]
+        0x00 iszero othercase jumpi // []
+        eq1:
+            4295128740 0x64 mstore // []
+        othercase:
+            1461446703485210103287273052203988822378723970341 0x64 mstore // []
+        0xa0 0x84 mstore // []
+        0x6e 0xa4 mstore // [] size
+        110 0x00 0xc4 calldatacopy // []
+        0x00 0x00 0x132 0x00 0x00 0x5a calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0xb999f169 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+    swapPatterneq0:
+        0x022c0d9f00000000000000000000000000000000000000000000000000000000 0x00 mstore // [selectorWithoutMask]
+        address 0x04 mstore // [selectorWithoutMask]
+        0x0000004000000000000000000000000000000000000000000000000000000000 and eq 0x0000004000000000000000000000000000000000000000000000000000000000 // [zeroForOne]
+        dup1 iszero 0x29 calldataload 0xb8 shr dup1 swap2 mul 0x04 mstore // [v2out zeroForOne]
+        mul 0x24 mstore // []
+        address 0x44 mstore // []
+        0x80 0x64 mstore // []
+        0x6e 0x84 mstore // []
+        110 0x00 0xa4 // []
+        
+        0x00 0x00 0x132 0x00 0x00 0x5a calldataload 0x60 shr gas call iszero iszero2 jumpi // []
+        iszero2:
+            0x13af6859 0x00 mstore // []
+            0x04 0x1c revert // []
+            stop
+        stop
+    
+    stop
+}
+
+#define macro CASE0Default() = takes (2) returns (0) {
+    stop
+}
+
+#define macro CASERemainderDefault() = takes (2) returns (0) {
+    // [swapPattern selectorWithoutMask]
+    pop // [selectorWithoutMask] 
+    // WARN datacopy(0, datasize("Runtime"), 32)
+
+    0xffffffff00000000000000000000000000000000000000000000000000000000 and dup1 eq 0x4782f77900000000000000000000000000000000000000000000000000000000 eq1 jumpi // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000]
+    eq1:
+        0 msload caller eq eqcaller jumpi // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000]
+        eqcaller:
+            0x8bdab432 0x00 mstore // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000] withdrawETH_notOwner_reverted()
+            0x04 0x1c revert // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000]
+            stop
+        0x00 0x00 0x00 0x00 0x24 calldataload 0x04 calldataload gas call iszero eq2 jumpi // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000]
+        eq2:
+            0x4fb26272 0x00 mstore // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000]
+            0x04 0x1c revert // [selectorWithoutMask & 0xffffffff00000000000000000000000000000000000000000000000000000000]
+            stop
+        stop
+    0x01e3366700000000000000000000000000000000000000000000000000000000 eq eq3 jumpi // []
+    eq3:
+        0 mload caller eq iszero noneq1 jumpi // []
+        noneq1:
+            0x72357d45 0x00 mstore // [] withdrawToken_notOwner_reverted()
+            0x04 0x1c revert // []
+            stop
+        // Get a pointer to some free memory.
+        0xa9059cbb00000000000000000000000000000000000000000000000000000000 0x40 mload dup1 mstore // [value]
+        dup1 4 add 0x04 calldataload mstore // [value] Append the "to" argument.
+        dup1 36 add 0x44 calldataload mstore // [value]  Append the "amount" argument.
+
+        0 mload eq 1 returndatasize 31 gt and returndatasize iszero or // [orResult value]
+        swap1 0 68 32 swap3 0 0x24 calldataload gas call and and1 jumpi // []
+        and1:
+            0xb36401d0 0x00 mstore // []
+            0x04 0x1 revert // []
+            stop
+        stop
+}
+
+
+#define macro INITIAL() = takes (1) returns (0) {
+    // [selector]
+    dup1 [selector, selector]
+    0xfa461e3300000000000000000000000000000000000000000000000000000000 // [0xfa461e3300000000000000000000000000000000000000000000000000000000, selector, selector]
+    eq eqslelctor0xfa jumpi
+    pop // [selector]
+    0x84 calldataload // [0x84Value, selector]
+
+
+
+    eqslelctor0xfa:
+
+
+
+    // Return value
+    0x20 0x00 return
 }
